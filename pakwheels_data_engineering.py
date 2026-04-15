@@ -61,11 +61,35 @@ def clean_types(df):
     print(f"[CLEAN] Data types cleaned and scaled.")
     return df
 
-def drop_missing(df):
+def handle_missing_values(df):
     before = len(df)
+    
+    # 1. Drop records where Target Variable (Price) or extreme critical feature (Year) is missing
     critical = [c for c in ["price", "year"] if c in df.columns]
     df.dropna(subset=critical, inplace=True)
-    print(f"[MISSING] Dropped {before - len(df)} rows missing critical logic fields.")
+    
+    # 2. Impute Numeric Variables with MEDIAN (robust to outliers)
+    if "mileage_km" in df.columns:
+        median_mileage = df["mileage_km"].median()
+        df["mileage_km"] = df["mileage_km"].fillna(median_mileage)
+        
+    if "engine_cc" in df.columns:
+        median_engine = df["engine_cc"].median()
+        df["engine_cc"] = df["engine_cc"].fillna(median_engine)
+
+    # 3. Impute Categorical Variables with MODE
+    categorical_cols = ["fuel_type", "transmission", "city", "body_type", "assembly", "exterior_color", "registered_city"]
+    for col in categorical_cols:
+        if col in df.columns:
+            # fill empty strings or Unknown with None first
+            df[col] = df[col].replace(["", "Unknown"], pd.NA)
+            mode_val = df[col].mode()
+            if not mode_val.empty:
+                df[col] = df[col].fillna(mode_val[0])
+            else:
+                df[col] = df[col].fillna("Other")
+                
+    print(f"[MISSING] Handled NAs. Dropped {before - len(df)} rows with missing critical tags, imputed the rest.")
     return df
 
 def prune_outliers(df):
@@ -117,7 +141,7 @@ def run_pipeline():
     try:
         df = load_raw(INPUT_FILE)
         df = clean_types(df)
-        df = drop_missing(df)
+        df = handle_missing_values(df)
         df = prune_outliers(df)
         df = engineer_features(df)
         df = encode_categoricals(df)
